@@ -54,6 +54,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_times: [0; crate::config::MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -168,4 +169,24 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Record one syscall invocation for the current task.
+pub fn add_syscall_times(syscall_id: usize) {
+    if syscall_id >= crate::config::MAX_SYSCALL_NUM {
+        return;
+    }
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].syscall_times[syscall_id] += 1;
+}
+
+/// How many times the current task has invoked syscall `syscall_id`.
+pub fn get_syscall_times(syscall_id: usize) -> usize {
+    if syscall_id >= crate::config::MAX_SYSCALL_NUM {
+        return 0;
+    }
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].syscall_times[syscall_id]
 }
