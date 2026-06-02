@@ -282,6 +282,10 @@ impl MemorySet {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
+    /// Mutable page table for munmap
+    pub fn page_table_mut(&mut self) -> &mut PageTable {
+        &mut self.page_table
+    }
 
     ///Remove all `MapArea`
     pub fn recycle_data_pages(&mut self) {
