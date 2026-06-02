@@ -17,6 +17,8 @@ pub const PAGE_SIZE_BITS: usize = 0xc;
 pub const MAX_SYSCALL_NUM: usize = 500;
 /// the virtual addr of trapoline
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
+/// max user virtual address (exclusive)
+pub const MAXVA: usize = TRAMPOLINE;
 /// the virtual addr of trap context
 pub const TRAP_CONTEXT_BASE: usize = TRAMPOLINE - PAGE_SIZE;
 /// clock frequency

@@ -14,7 +14,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr, VirtPageNum, VPNRange};
+use crate::mm::PageTableEntry;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -201,4 +204,64 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Record one syscall invocation for the current task.
+pub fn add_syscall_times(syscall_id: usize) {
+    if syscall_id >= MAX_SYSCALL_NUM {
+        return;
+    }
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].syscall_times[syscall_id] += 1;
+}
+
+/// How many times the current task has invoked syscall `syscall_id`.
+pub fn get_syscall_times(syscall_id: usize) -> usize {
+    if syscall_id >= MAX_SYSCALL_NUM {
+        return 0;
+    }
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].syscall_times[syscall_id]
+}
+
+fn with_current_memory_set<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut crate::mm::MemorySet) -> R,
+{
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    f(&mut inner.tasks[current].memory_set)
+}
+
+/// Translate vpn in the current task's address space.
+pub fn current_translate(vpn: VirtPageNum) -> Option<PageTableEntry> {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].memory_set.translate(vpn)
+}
+
+/// Map a new framed area into the current task.
+pub fn current_map_area(start_va: VirtAddr, end_va: VirtAddr, perm: MapPermission) {
+    with_current_memory_set(|memory_set| {
+        memory_set.insert_framed_area(start_va, end_va, perm);
+    });
+}
+
+/// Unmap every page in `[start, start + len)`; all must be mapped.
+pub fn current_unmap_area(start: usize, len: usize) -> bool {
+    with_current_memory_set(|memory_set| {
+        let start_vpn = VirtAddr::from(start).floor();
+        let end_vpn = VirtAddr::from(start + len).ceil();
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            match memory_set.translate(vpn) {
+                Some(pte) if pte.is_valid() => {
+                    memory_set.page_table_mut().unmap(vpn);
+                }
+                _ => return false,
+            }
+        }
+        true
+    })
 }
