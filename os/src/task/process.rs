@@ -49,6 +49,10 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// enable deadlock detection
+    pub deadlock_detect_enabled: bool,
+    /// semaphore units held by each thread: sem_allocation[tid][sem_id]
+    pub sem_allocation: Vec<Vec<usize>>,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +85,36 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+
+    fn ensure_sem_allocation_row(&mut self, tid: usize) {
+        while self.sem_allocation.len() <= tid {
+            self.sem_allocation.push(vec![0; self.semaphore_list.len()]);
+        }
+        let row = &mut self.sem_allocation[tid];
+        while row.len() < self.semaphore_list.len() {
+            row.push(0);
+        }
+    }
+
+    pub fn extend_sem_allocation_cols(&mut self) {
+        for row in self.sem_allocation.iter_mut() {
+            row.push(0);
+        }
+    }
+
+    /// Record that `tid` acquired one unit of `sem_id`.
+    pub fn sem_alloc_record(&mut self, tid: usize, sem_id: usize) {
+        self.ensure_sem_allocation_row(tid);
+        self.sem_allocation[tid][sem_id] += 1;
+    }
+
+    /// Record that `tid` released one unit of `sem_id`.
+    pub fn sem_dealloc_record(&mut self, tid: usize, sem_id: usize) {
+        self.ensure_sem_allocation_row(tid);
+        if self.sem_allocation[tid][sem_id] > 0 {
+            self.sem_allocation[tid][sem_id] -= 1;
+        }
     }
 }
 
@@ -119,6 +153,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_enabled: false,
+                    sem_allocation: Vec::new(),
                 })
             },
         });
@@ -245,6 +281,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_enabled: false,
+                    sem_allocation: Vec::new(),
                 })
             },
         });
