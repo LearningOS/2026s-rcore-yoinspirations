@@ -41,16 +41,20 @@ impl TaskManager {
         // Among tasks with minimum stride, pick in round-robin order.
         for offset in 0..len {
             let idx = (self.rr_cursor + offset) % len;
-            let task = &self.ready_queue[idx];
-            let inner = task.inner_exclusive_access();
-            if inner.task_status == TaskStatus::Ready && inner.stride == min_stride {
+            let take = {
+                let task = &self.ready_queue[idx];
+                let inner = task.inner_exclusive_access();
+                inner.task_status == TaskStatus::Ready && inner.stride == min_stride
+            };
+            if take {
                 self.rr_cursor = (idx + 1) % len;
                 let task = self.ready_queue.remove(idx).unwrap();
                 {
                     let mut inner = task.inner_exclusive_access();
-                    inner.stride = inner
+                    let new_stride = inner
                         .stride
                         .saturating_add(BIG_STRIDE / inner.priority.max(2));
+                    inner.stride = new_stride;
                 }
                 return Some(task);
             }
