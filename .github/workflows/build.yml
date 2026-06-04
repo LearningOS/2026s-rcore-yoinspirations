@@ -41,10 +41,10 @@ jobs:
           git clone https://github.com/LearningOS/rCore-Tutorial-Test.git ci-user/user
           ID=`git rev-parse --abbrev-ref HEAD | grep -oP 'ch\K[0-9]'`
           cd ci-user
-          make test CHAPTER=$ID | tee ../output.txt
+          make test CHAPTER=$ID OFFLINE=1 | tee ../output.txt
       - name: end
         id: end
-        run: grep -a "Test passed" output.txt | grep -oP "\d{1,}/\d{1,}" | xargs -i echo "points={}" | tee $GITHUB_OUTPUT
+        run: grep -a "Test passed" output.txt | tail -1 | grep -oP "\d{1,}/\d{1,}" | xargs -i echo "points={}" | tee $GITHUB_OUTPUT
       - name: Require full points
         run: |
           POINTS='${{ steps.end.outputs.points }}'
